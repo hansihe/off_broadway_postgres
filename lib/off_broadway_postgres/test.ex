@@ -17,10 +17,15 @@ defmodule OffBroadwayPostgres.Test do
     }
   end
 
-  def claim_jobs(state, num) do
+  def make_runner(state) do
     batch_idx = state.batch_idx
-    {:ok, jobs} = Producer.claim_jobs(state.source, {state.runner_id, batch_idx}, num)
     state = %{state | batch_idx: batch_idx + 1}
+    {:ok, {state.runner_id, batch_idx}, state}
+  end
+
+  def claim_jobs(state, num) do
+    {:ok, runner, state} = make_runner(state)
+    {:ok, jobs} = Producer.claim_jobs(state.source, runner, num)
     {:ok, state, jobs}
   end
 
