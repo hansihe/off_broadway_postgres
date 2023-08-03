@@ -7,6 +7,7 @@ defmodule OffBroadwayPostgres.SimpleSource do
     id_field = Keyword.get(opts, :id_field, :id)
     job_id_field = Keyword.fetch!(opts, :job_id_field)
     job_runner_field = Keyword.fetch!(opts, :job_runner_field)
+    preload = Keyword.get(opts, :preload, [])
 
     quote do
       @behaviour OffBroadwayPostgres.Source
@@ -39,6 +40,13 @@ defmodule OffBroadwayPostgres.SimpleSource do
             select: u
           )
           |> unquote(repo).update_all([])
+
+        items =
+          if unquote(preload) == [] do
+            items
+          else
+            unquote(repo).preload(items, unquote(preload))
+          end
 
         {:ok, Enum.map(items, &%{item: &1})}
       end
