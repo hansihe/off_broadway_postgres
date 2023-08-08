@@ -2,8 +2,7 @@ defmodule OffBroadwayPostgres.Test do
   defstruct [
     runner_id: nil,
     source: nil,
-    repo: nil,
-    batch_idx: 1
+    repo: nil
   ]
 
   alias OffBroadwayPostgres.Producer
@@ -18,9 +17,7 @@ defmodule OffBroadwayPostgres.Test do
   end
 
   def make_runner(state) do
-    batch_idx = state.batch_idx
-    state = %{state | batch_idx: batch_idx + 1}
-    {:ok, {state.runner_id, batch_idx}, state}
+    {:ok, state.runner_id, state}
   end
 
   def claim_jobs(state, num) do

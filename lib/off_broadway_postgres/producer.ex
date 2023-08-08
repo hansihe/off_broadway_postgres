@@ -56,7 +56,6 @@ defmodule OffBroadwayPostgres.Producer do
     {:producer,
      %{
        runner_id: runner_id,
-       batch_idx: 0,
        demand: 0,
        pipeline_name: pipeline_name,
        message_fetch_count: opts[:message_fetch_count],
@@ -99,13 +98,8 @@ defmodule OffBroadwayPostgres.Producer do
   def fetch_demand(state) do
     import Ecto.Query
 
-    state = %{
-      state
-      | batch_idx: state.batch_idx + 1
-    }
-
     to_claim_num = max(state.message_fetch_count, state.demand)
-    runner_col = {state.runner_id, state.batch_idx}
+    runner_col = state.runner_id
 
     {:ok, claimed} = claim_jobs(state.source, runner_col, to_claim_num)
 
@@ -206,14 +200,14 @@ defmodule OffBroadwayPostgres.Producer do
     runner_id
   end
 
-  def claim_jobs({source_mod, source_arg}, {_, _} = runner_col, to_claim_num) do
+  def claim_jobs({source_mod, source_arg}, runner_col, to_claim_num) do
     import Ecto.Query
 
     apply_claimed_filter = fn query, job_source, job_field, job_runner_field ->
       from(
         q in query,
         left_join: runner in subquery(OffBroadwayPostgres.Model.Runner.active_runners_query()),
-        on: fragment("((?).runner_id)", field(as(^job_source), ^job_runner_field)) == runner.id,
+        on: field(as(^job_source), ^job_runner_field) == runner.id,
         left_join: job in OffBroadwayPostgres.Model.Job,
         on: field(as(^job_source), ^job_field) == job.id,
         where: is_nil(runner.id) and (is_nil(job.id) or job.status == :retry)
@@ -243,15 +237,29 @@ defmodule OffBroadwayPostgres.Producer do
     #   In this case we need to insert a new row in the jobs table with the error logged.
     # * There is an existing job row.
     #   In this case we need to update the attempt, and either fail or put the job in a retry state.
+    failed_with_job_id = Enum.map(failed, &{&1, source_mod.get_job_id(&1.data, source_arg)})
+    failed_job_ids = Enum.map(failed_with_job_id, fn {_msg, job_id} -> job_id end)
+
+    existing_job_ids =
+      from(
+        j in OffBroadwayPostgres.Model.Job,
+        where: j.id in ^failed_job_ids,
+        select: j.id
+      )
+      |> repo.all()
+      |> MapSet.new()
+
     grouped_fails =
       failed
       |> Enum.map(&{&1, source_mod.get_job_id(&1.data, source_arg)})
-      |> Enum.group_by(fn {_item, job_id} -> job_id != nil end)
+      |> Enum.group_by(fn {_item, job_id} ->
+        job_id != nil and MapSet.member?(existing_job_ids, job_id)
+      end)
 
     with_job = Map.get(grouped_fails, true, [])
     without_job =
       Map.get(grouped_fails, false, [])
-      |> Enum.map(fn {id, nil} -> id end)
+      |> Enum.map(fn {id, _} -> id end)
 
     repo.transaction(fn ->
       # Path 1: Failed jobs WITH existing job rows.

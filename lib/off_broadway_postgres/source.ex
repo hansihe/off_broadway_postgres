@@ -23,7 +23,8 @@ defmodule OffBroadwayPostgres.Source do
 
   @type item :: term()
 
-  @type runner_or_nil :: OffBroadwayPostgres.Ecto.Runner.t() | nil
+  @type runner :: :integer
+  @type runner_or_nil :: runner() | nil
 
   @doc """
   Returns the ecto repo this source applies to.
@@ -45,7 +46,7 @@ defmodule OffBroadwayPostgres.Source do
   examples above.
   """
   @callback claim_jobs(
-              runner :: OffBroadwayPostgres.Ecto.Runner.t(),
+              runner :: runner(),
               filter_fn :: apply_claimed_filter_fn(),
               claim_count :: count(),
               source_arg()
