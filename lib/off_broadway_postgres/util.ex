@@ -20,17 +20,20 @@ defmodule OffBroadwayPostgres.Util do
         )
       )
 
-    stats
-    |> Enum.group_by(
-      fn
-        %{finished: true} -> :done
-        %{status: nil, finished: false} -> :pending
-        %{status: :failed} -> :failed
-        %{status: :retry} -> :retry
-      end,
-      fn %{count: count} -> count end
-    )
-    |> Enum.map(fn {key, val} -> {key, Enum.sum(val)} end)
+    data =
+      stats
+      |> Enum.group_by(
+        fn
+          %{finished: true} -> :done
+          %{status: nil, finished: false} -> :pending
+          %{status: :failed} -> :failed
+          %{status: :retry} -> :retry
+        end,
+        fn %{count: count} -> count end
+      )
+      |> Enum.map(fn {key, val} -> {key, Enum.sum(val)} end)
+
+    struct!(%OffBroadwayPostgres.SourceStatistics.Stats{}, data)
   end
 
   def failed_for_pipeline(pipeline_name) do

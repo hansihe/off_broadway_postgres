@@ -3,6 +3,7 @@ defmodule OffBroadwayPostgres.SimpleSource do
   defmacro __using__(opts) do
     repo = Keyword.fetch!(opts, :repo)
     schema = Keyword.fetch!(opts, :schema)
+    filter = Keyword.get(opts, :filter, true)
     claimable = Keyword.fetch!(opts, :claimable)
     id_field = Keyword.get(opts, :id_field, :id)
     job_id_field = Keyword.fetch!(opts, :job_id_field)
@@ -11,6 +12,7 @@ defmodule OffBroadwayPostgres.SimpleSource do
 
     quote do
       @behaviour OffBroadwayPostgres.Source
+      @behaviour OffBroadwayPostgres.SourceStatistics
 
       @impl true
       def repo(_arg) do
@@ -19,12 +21,14 @@ defmodule OffBroadwayPostgres.SimpleSource do
 
       @impl true
       def claim_jobs(runner, filter_fn, claim_count, _arg) do
+        filter_cond = unquote(filter)
         claimable_cond = unquote(claimable)
 
         claimable_query =
           from(
             s in unquote(schema),
             as: :s,
+            where: ^filter_cond,
             where: ^claimable_cond,
             limit: ^claim_count,
             lock: fragment("FOR UPDATE OF ? SKIP LOCKED", s)
@@ -69,6 +73,23 @@ defmodule OffBroadwayPostgres.SimpleSource do
         |> CX.Repo.update_all([])
 
         :ok
+      end
+
+      @impl true
+      def get_stats(_arg) do
+        claimable_cond = unquote(claimable)
+        filter_cond = unquote(filter)
+
+        from(
+          s in unquote(schema),
+          as: :s,
+          where: ^filter_cond
+        )
+        |> OffBroadwayPostgres.Util.job_stats(
+          unquote(repo),
+          dynamic([s: s], s.unquote(job_id_field)),
+          dynamic([], not ^claimable_cond)
+        )
       end
 
     end
